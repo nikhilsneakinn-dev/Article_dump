@@ -694,6 +694,13 @@ QUANTITY_RE = re.compile(r"^(?P<name>.+?)\s+x\s*(?P<qty>\d+(?:\.\d+)?)\b", re.IG
 SERVICE_QUANTITY_RE = re.compile(r"(?P<name>.+?)\s+x\s*(?P<qty>\d+(?:\.\d+)?)\b", re.IGNORECASE)
 ARTICLE_DETAIL_RE = re.compile(r"^(?P<photo>\{P\})?\s*/?\s*(?P<label>[A-Z])\s*[-.\s]\s*(?P<detail>.+)$")
 PHOTO_DETAIL_RE = re.compile(r"^(?P<photo>\{P\})\s*/?\s*(?P<detail>.+)$")
+ARTICLE_LABEL_BOUNDARY_RE = re.compile(r"(?<!^)\s*:\s*((?:\{P\}\s*/?\s*)?[A-Z]\s*[-.\s])")
+TRAILING_INLINE_SERVICE_RE = re.compile(
+    r"\s+(?:heel\s*-?\s*tip|full\s+bottom\s+sole\s+pasting|repair|stitching|insole\s+pasting|"
+    r"shaft\s+change|color\s+touch\s*up|color\s+touchup)\s*$",
+    re.IGNORECASE,
+)
+TRAILING_ATTACHED_SERVICE_RE = re.compile(r"(?<=\d)(?:heel\s*-?\s*tip)$", re.IGNORECASE)
 SERVICE_PREFIX_RE = re.compile(
     r"(?=[A-Za-z][A-Za-z0-9 .&/()_-]*:\s*(?:\{P\})?\s*[A-Z]\s*[-.\s])"
 )
@@ -796,11 +803,29 @@ def expand_article_lines(lines: list[str], services: list[str]) -> list[str]:
             parts = next_parts
 
         for part in parts:
-            part = clean_text(part)
-            if part:
-                expanded.append(part)
+            for article_part in split_inline_article_labels(part):
+                article_part = clean_text(article_part)
+                if article_part:
+                    expanded.append(article_part)
 
     return expanded
+
+
+def split_inline_article_labels(line: str) -> list[str]:
+    text = clean_text(line)
+    if not text:
+        return []
+    text = ARTICLE_LABEL_BOUNDARY_RE.sub(r"\n\1", text)
+    parts = []
+    for part in text.splitlines():
+        part = clean_text(part)
+        if not part:
+            continue
+        part = TRAILING_INLINE_SERVICE_RE.sub("", part)
+        part = TRAILING_ATTACHED_SERVICE_RE.sub("", part)
+        if clean_text(part):
+            parts.append(clean_text(part))
+    return parts
 
 
 def parse_article_candidate(line: str) -> dict[str, str] | None:
