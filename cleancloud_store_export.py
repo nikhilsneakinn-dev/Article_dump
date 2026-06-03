@@ -860,7 +860,7 @@ def parse_article_candidate(line: str) -> dict[str, str] | None:
     return {
         "photo_marker": "Yes" if match.group("photo") else "",
         "article_label": label,
-        "article_raw": line,
+        "article_raw": strip_photo_marker(line),
         "article_description": detail_without_tags,
         "brand": brand,
         "color": color,
@@ -884,6 +884,10 @@ def service_map_from_article_lines(lines: list[str]) -> dict[str, dict[str, str]
                 "service_tags": clean_text(tags),
             }
     return mapped
+
+
+def strip_photo_marker(value: str | None) -> str:
+    return clean_text(re.sub(r"^\s*\{P\}\s*/?\s*", "", str(value or ""), flags=re.IGNORECASE))
 
 
 def parse_brand_color_size(description: str) -> tuple[str, str, str]:
@@ -913,13 +917,12 @@ def parse_brand_color_size(description: str) -> tuple[str, str, str]:
 
 
 def item_note_from_article(article: dict[str, str]) -> str:
-    marker = "{P} " if article.get("photo_marker") else ""
     label = article.get("article_label", "")
     description = article.get("article_description", "")
     if label and description:
-        note = f"{marker}{label}-{description}"
+        note = f"{label}-{description}"
     else:
-        note = f"{marker}{description or article.get('article_raw', '')}"
+        note = f"{description or strip_photo_marker(article.get('article_raw', ''))}"
 
     if article.get("article_note"):
         note = f"{note} ({article['article_note']})"
