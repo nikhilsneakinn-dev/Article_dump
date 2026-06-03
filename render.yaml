@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: cleancloud-export
+    env: docker
+    plan: starter
+    autoDeploy: true

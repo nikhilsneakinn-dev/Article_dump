@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta {% if job.status in ['queued', 'running'] %}http-equiv="refresh" content="5"{% endif %}>
+  <title>Export Status</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <section class="panel">
+      <div class="mast">
+        <p class="eyebrow">Job {{ job.id }}</p>
+        <h1>{{ job.status|title }}</h1>
+      </div>
+      {% if job.status == 'complete' %}
+        <a class="button" href="{{ url_for('download_export', job_id=job.id) }}">Download Excel</a>
+      {% elif job.status == 'failed' %}
+        <div class="alert">{{ job.error }}</div>
+        <a class="link" href="{{ url_for('index') }}">Start another export</a>
+      {% else %}
+        <div class="progress"><div></div></div>
+        <p class="muted">CleanCloud is loading in a headless browser. This page refreshes automatically.</p>
+      {% endif %}
+      {% if job.log %}
+        <pre>{{ job.log }}</pre>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

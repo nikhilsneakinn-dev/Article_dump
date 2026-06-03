@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CleanCloud Export</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <section class="panel">
+      <div class="mast">
+        <p class="eyebrow">CleanCloud</p>
+        <h1>Article Export</h1>
+      </div>
+      {% if error %}
+        <div class="alert">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="{{ url_for('create_export') }}" class="form">
+        <label>
+          <span>Email</span>
+          <input name="username" type="email" autocomplete="username" required>
+        </label>
+        <label>
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <fieldset>
+          <legend>Tabs</legend>
+          <label class="check"><input type="checkbox" name="tabs" value="Ready" checked> Ready</label>
+          <label class="check"><input type="checkbox" name="tabs" value="Cleaning"> Cleaning</label>
+        </fieldset>
+        <label>
+          <span>Order IDs</span>
+          <textarea name="order_ids" rows="4" placeholder="Optional: 82169 80168 79990"></textarea>
+        </label>
+        <button type="submit">Start Export</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
