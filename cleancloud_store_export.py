@@ -114,7 +114,110 @@ def wait_for_manual_login(driver: WebDriver, timeout_seconds: int) -> None:
     wait_for_page_ready(driver)
 
 
-def login_with_credentials(driver: WebDriver, username: str, password: str, timeout_seconds: int) -> None:
+def otp_prompt_visible(driver: WebDriver) -> bool:
+    try:
+        return bool(
+            driver.execute_script(
+                """
+                const clean = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+                const visible = (el) => {
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    return style.display !== 'none' &&
+                        style.visibility !== 'hidden' &&
+                        rect.width > 0 &&
+                        rect.height > 0;
+                };
+                const text = clean(document.body ? document.body.innerText : '').toLowerCase();
+                const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
+                const otpInput = inputs.find((input) => {
+                    const type = (input.type || '').toLowerCase();
+                    const name = `${input.name || ''} ${input.id || ''} ${input.placeholder || ''}`.toLowerCase();
+                    return type !== 'password' && /otp|pin|code|verification|auth/.test(name);
+                });
+                return !!otpInput || /otp|pin|verification code|security code|authentication code/.test(text);
+                """
+            )
+        )
+    except WebDriverException:
+        return False
+
+
+def wait_for_otp_code(otp_file: str | None, otp_request_file: str | None, timeout_seconds: int) -> str:
+    if not otp_file:
+        raise RuntimeError("CleanCloud requested a PIN, but no --otp-file was provided.")
+    if otp_request_file:
+        Path(otp_request_file).write_text("requested", encoding="utf-8")
+    print("CleanCloud requested an email PIN. Waiting for PIN input...")
+    deadline = time.time() + timeout_seconds
+    otp_path = Path(otp_file)
+    while time.time() < deadline:
+        if otp_path.exists():
+            code = clean_text(otp_path.read_text(encoding="utf-8", errors="ignore"))
+            if code:
+                return code
+        time.sleep(1)
+    raise RuntimeError("Timed out waiting for CleanCloud email PIN.")
+
+
+def submit_otp_code(driver: WebDriver, otp_code: str) -> None:
+    submitted = bool(
+        driver.execute_script(
+            """
+            const visible = (el) => {
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return style.display !== 'none' &&
+                    style.visibility !== 'hidden' &&
+                    rect.width > 0 &&
+                    rect.height > 0;
+            };
+            const code = arguments[0];
+            const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
+            const otpInput = inputs.find((input) => {
+                const type = (input.type || '').toLowerCase();
+                const name = `${input.name || ''} ${input.id || ''} ${input.placeholder || ''}`.toLowerCase();
+                return type !== 'password' && /otp|pin|code|verification|auth/.test(name);
+            }) || inputs.find((input) => {
+                const type = (input.type || '').toLowerCase();
+                return type === 'text' || type === 'tel' || type === 'number';
+            });
+            if (!otpInput) return false;
+            otpInput.focus();
+            otpInput.value = code;
+            otpInput.dispatchEvent(new Event('input', {bubbles: true}));
+            otpInput.dispatchEvent(new Event('change', {bubbles: true}));
+            const form = otpInput.closest('form');
+            const button = form
+                ? Array.from(form.querySelectorAll('button, input[type="submit"]')).filter(visible)[0]
+                : Array.from(document.querySelectorAll('button, input[type="submit"]')).filter(visible)[0];
+            if (button) {
+                button.click();
+                return true;
+            }
+            if (form) {
+                form.requestSubmit ? form.requestSubmit() : form.submit();
+                return true;
+            }
+            otpInput.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+            return true;
+            """,
+            otp_code,
+        )
+    )
+    if not submitted:
+        raise RuntimeError("Could not find CleanCloud PIN field.")
+
+
+def login_with_credentials(
+    driver: WebDriver,
+    username: str,
+    password: str,
+    timeout_seconds: int,
+    otp_file: str | None = None,
+    otp_request_file: str | None = None,
+    otp_timeout_seconds: int = 300,
+) -> None:
     print("Opening CleanCloud and logging in with provided credentials.")
     driver.get(STORE_URL)
     wait_for_page_ready(driver)
@@ -173,12 +276,27 @@ def login_with_credentials(driver: WebDriver, username: str, password: str, time
     if not filled:
         raise RuntimeError("Could not find CleanCloud login fields on the page.")
 
-    try:
-        WebDriverWait(driver, timeout_seconds).until(
-            lambda d: LOGIN_URL_PART not in d.current_url
-        )
-    except TimeoutException:
-        raise RuntimeError("CleanCloud login did not complete before timeout.")
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if LOGIN_URL_PART not in driver.current_url:
+            driver.get(STORE_URL)
+            wait_for_page_ready(driver)
+            return
+        if otp_prompt_visible(driver):
+            otp_code = wait_for_otp_code(otp_file, otp_request_file, otp_timeout_seconds)
+            submit_otp_code(driver, otp_code)
+            try:
+                WebDriverWait(driver, timeout_seconds).until(
+                    lambda d: LOGIN_URL_PART not in d.current_url
+                )
+            except TimeoutException:
+                raise RuntimeError("CleanCloud login did not complete after PIN entry.")
+            driver.get(STORE_URL)
+            wait_for_page_ready(driver)
+            return
+        time.sleep(1)
+
+    raise RuntimeError("CleanCloud login did not complete before timeout.")
 
     driver.get(STORE_URL)
     wait_for_page_ready(driver)
@@ -1546,6 +1664,20 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("CLEAN_CLOUD_PASSWORD") or os.environ.get("CLEANCLOUD_PASSWORD"),
         help="CleanCloud password. Prefer environment variable CLEAN_CLOUD_PASSWORD for hosted runs.",
     )
+    parser.add_argument(
+        "--otp-file",
+        help="Path to a file where the web UI writes the CleanCloud email PIN when requested.",
+    )
+    parser.add_argument(
+        "--otp-request-file",
+        help="Path to a marker file created when CleanCloud asks for an email PIN.",
+    )
+    parser.add_argument(
+        "--otp-timeout",
+        type=int,
+        default=300,
+        help="Seconds to wait for CleanCloud email PIN input. Default: 300",
+    )
     return parser.parse_args()
 
 
@@ -1558,7 +1690,15 @@ def main() -> int:
         if args.start_when_ready:
             wait_for_user_ready(driver)
         elif args.username and args.password:
-            login_with_credentials(driver, args.username, args.password, args.login_timeout)
+            login_with_credentials(
+                driver,
+                args.username,
+                args.password,
+                args.login_timeout,
+                args.otp_file,
+                args.otp_request_file,
+                args.otp_timeout,
+            )
         else:
             wait_for_manual_login(driver, args.login_timeout)
         WebDriverWait(driver, 30).until(

@@ -26,6 +26,8 @@ class ExportJob:
     status: str = "queued"
     created_at: datetime = field(default_factory=datetime.utcnow)
     output_path: Path | None = None
+    otp_file: Path | None = None
+    otp_request_file: Path | None = None
     log: str = ""
     error: str = ""
 
@@ -44,6 +46,15 @@ def run_export(job_id: str, username: str, password: str, tabs: list[str], order
         job = jobs[job_id]
         job.status = "running"
     output_path = JOB_DIR / f"cleancloud_export_{job_id}.xlsx"
+    otp_file = JOB_DIR / f"{job_id}.otp"
+    otp_request_file = JOB_DIR / f"{job_id}.otp_requested"
+    for path in (otp_file, otp_request_file):
+        if path.exists():
+            path.unlink()
+    with jobs_lock:
+        job = jobs[job_id]
+        job.otp_file = otp_file
+        job.otp_request_file = otp_request_file
     command = [
         sys.executable,
         str(BASE_DIR / "cleancloud_store_export.py"),
@@ -52,6 +63,12 @@ def run_export(job_id: str, username: str, password: str, tabs: list[str], order
         "90",
         "--output",
         str(output_path),
+        "--otp-file",
+        str(otp_file),
+        "--otp-request-file",
+        str(otp_request_file),
+        "--otp-timeout",
+        "600",
         "--tabs",
         *tabs,
     ]
@@ -63,24 +80,45 @@ def run_export(job_id: str, username: str, password: str, tabs: list[str], order
     env["CLEAN_CLOUD_PASSWORD"] = password
 
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             command,
             cwd=BASE_DIR,
             env=env,
             text=True,
-            capture_output=True,
-            timeout=60 * 45,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
         )
-        log = "\n".join(part for part in [result.stdout, result.stderr] if part)
+        log_lines: list[str] = []
+        while True:
+            if otp_request_file.exists():
+                with jobs_lock:
+                    job = jobs[job_id]
+                    if job.status == "running":
+                        job.status = "waiting_otp"
+            line = process.stdout.readline() if process.stdout else ""
+            if line:
+                log_lines.append(line)
+                with jobs_lock:
+                    job = jobs[job_id]
+                    job.log = "".join(log_lines)[-12000:]
+                    if job.status == "waiting_otp" and otp_file.exists():
+                        job.status = "running"
+            elif process.poll() is not None:
+                break
+            else:
+                threading.Event().wait(0.5)
+
+        return_code = process.wait(timeout=5)
+        log = "".join(log_lines)
         with jobs_lock:
             job = jobs[job_id]
             job.log = log[-12000:]
-            if result.returncode == 0 and output_path.exists():
+            if return_code == 0 and output_path.exists():
                 job.status = "complete"
                 job.output_path = output_path
             else:
                 job.status = "failed"
-                job.error = f"Export failed with exit code {result.returncode}."
+                job.error = f"Export failed with exit code {return_code}."
     except subprocess.TimeoutExpired as exc:
         with jobs_lock:
             job = jobs[job_id]
@@ -129,6 +167,21 @@ def job_status(job_id: str):
     if not job:
         abort(404)
     return render_template("status.html", job=job)
+
+
+@app.post("/exports/<job_id>/otp")
+def submit_otp(job_id: str):
+    otp_code = request.form.get("otp", "").strip()
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job or not job.otp_file:
+        abort(404)
+    if not otp_code:
+        return redirect(url_for("job_status", job_id=job_id))
+    job.otp_file.write_text(otp_code, encoding="utf-8")
+    with jobs_lock:
+        jobs[job_id].status = "running"
+    return redirect(url_for("job_status", job_id=job_id))
 
 
 @app.get("/exports/<job_id>/download")

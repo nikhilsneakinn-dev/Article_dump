@@ -123,6 +123,16 @@ button,
   border: 1px solid #fecdd3;
 }
 
+.alert.info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.compact {
+  margin-top: 18px;
+}
+
 .muted {
   color: #526071;
 }
