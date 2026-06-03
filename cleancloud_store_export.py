@@ -887,12 +887,13 @@ def article_rows_for_order(row: dict[str, str]) -> list[dict[str, str]]:
         service_tags = clean_text(" ".join(re.findall(r"\(([^)]+)\)", service))) or article["service_tags_from_detail"]
         service_clean = clean_text(re.sub(r"\([^)]*\)", "", service).strip(" -"))
         order_total = first_value(row, "TOTAL", "total", "order_total")
+        article_label = clean_text(article["article_label"]) or label_for_index(index - 1)
         article_rows.append(
             {
                 "source_tab": first_value(row, "Source Tab", "source_tab"),
                 "order_id": order_id,
                 "article_number": index,
-                "article_row_id": f"{order_id}-{index}" if order_id else str(index),
+                "article_row_id": f"{order_id}-{article_label}" if order_id else article_label,
                 "item_id": item_ids[index - 1] if index - 1 < len(item_ids) else "",
                 "item_note": item_note_from_article(article),
                 "brand": article["brand"],
@@ -911,7 +912,7 @@ def article_rows_for_order(row: dict[str, str]) -> list[dict[str, str]]:
                 "item_bill_amount": "",
                 "bill_source": "not_visible_in_store_list",
                 "order_notes": first_value(row, "NOTES", "notes"),
-                "article_label": article["article_label"],
+                "article_label": article_label,
                 "article_description": article["article_description"],
                 "article_note": article["article_note"],
                 "article_raw": article["article_raw"],
