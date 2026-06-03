@@ -166,6 +166,16 @@ def job_status(job_id: str):
         job = jobs.get(job_id)
     if not job:
         abort(404)
+    if (
+        job.status in {"queued", "running"}
+        and job.otp_request_file
+        and job.otp_request_file.exists()
+        and job.otp_file
+        and not job.otp_file.exists()
+    ):
+        with jobs_lock:
+            jobs[job_id].status = "waiting_otp"
+            job = jobs[job_id]
     return render_template("status.html", job=job)
 
 

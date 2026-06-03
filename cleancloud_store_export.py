@@ -133,9 +133,10 @@ def otp_prompt_visible(driver: WebDriver) -> bool:
                 const otpInput = inputs.find((input) => {
                     const type = (input.type || '').toLowerCase();
                     const name = `${input.name || ''} ${input.id || ''} ${input.placeholder || ''}`.toLowerCase();
-                    return type !== 'password' && /otp|pin|code|verification|auth/.test(name);
+                    return type !== 'password' && /otp|pin|code|verification|auth|2fa|twofactor|two-factor/.test(name);
                 });
-                return !!otpInput || /otp|pin|verification code|security code|authentication code/.test(text);
+                return !!otpInput ||
+                    /otp|pin|verification code|security code|authentication code|two factor|two-factor|2fa|code sent|sent to email|sent to your email/.test(text);
                 """
             )
         )
