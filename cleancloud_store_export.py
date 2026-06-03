@@ -697,7 +697,7 @@ PHOTO_DETAIL_RE = re.compile(r"^(?P<photo>\{P\})\s*/?\s*(?P<detail>.+)$")
 ARTICLE_LABEL_BOUNDARY_RE = re.compile(r"(?<!^)\s*:\s*((?:\{P\}\s*/?\s*)?[A-Z]\s*[-.\s])")
 TRAILING_INLINE_SERVICE_RE = re.compile(
     r"\s+(?:heel\s*-?\s*tip|full\s+bottom\s+sole\s+pasting|repair|stitching|insole\s+pasting|"
-    r"shaft\s+change|color\s+touch\s*up|color\s+touchup)\s*$",
+    r"shaft\s+change|color\s+touch\s*up|color\s+touchup|delivery(?:\s*-\s*[^:]+)?\s*:\s*final|final)\s*$",
     re.IGNORECASE,
 )
 TRAILING_ATTACHED_SERVICE_RE = re.compile(r"(?<=\d)(?:heel\s*-?\s*tip)$", re.IGNORECASE)
