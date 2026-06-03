@@ -41,6 +41,16 @@ def clean_order_ids(raw: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
+def summarize_failure(log: str, return_code: int) -> str:
+    for line in reversed(log.splitlines()):
+        line = line.strip()
+        if line.startswith("Export failed:"):
+            return line
+        if "CleanCloud" in line or "Login" in line or "PIN" in line:
+            return line
+    return f"Export failed with exit code {return_code}."
+
+
 def run_export(job_id: str, username: str, password: str, tabs: list[str], order_ids: list[str]) -> None:
     with jobs_lock:
         job = jobs[job_id]
@@ -60,7 +70,7 @@ def run_export(job_id: str, username: str, password: str, tabs: list[str], order
         str(BASE_DIR / "cleancloud_store_export.py"),
         "--headless",
         "--login-timeout",
-        "90",
+        "240",
         "--output",
         str(output_path),
         "--otp-file",
@@ -68,7 +78,7 @@ def run_export(job_id: str, username: str, password: str, tabs: list[str], order
         "--otp-request-file",
         str(otp_request_file),
         "--otp-timeout",
-        "600",
+        "900",
         "--tabs",
         *tabs,
     ]
@@ -118,7 +128,7 @@ def run_export(job_id: str, username: str, password: str, tabs: list[str], order
                 job.output_path = output_path
             else:
                 job.status = "failed"
-                job.error = f"Export failed with exit code {return_code}."
+                job.error = summarize_failure(log, return_code)
     except subprocess.TimeoutExpired as exc:
         with jobs_lock:
             job = jobs[job_id]

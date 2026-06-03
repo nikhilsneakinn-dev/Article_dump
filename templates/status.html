@@ -12,7 +12,7 @@
     <section class="panel">
       <div class="mast">
         <p class="eyebrow">Job {{ job.id }}</p>
-        <h1>{{ job.status|title }}</h1>
+        <h1>{% if job.status == 'waiting_otp' %}Waiting For Pin{% else %}{{ job.status|title }}{% endif %}</h1>
       </div>
       {% if job.status == 'complete' %}
         <a class="button" href="{{ url_for('download_export', job_id=job.id) }}">Download Excel</a>
