@@ -31,6 +31,16 @@
       {% else %}
         <div class="progress"><div></div></div>
         <p class="muted">CleanCloud is loading in a headless browser. This page refreshes automatically.</p>
+        <details class="otp-help">
+          <summary>Got a CleanCloud email PIN?</summary>
+          <form method="post" action="{{ url_for('submit_otp', job_id=job.id) }}" class="form compact">
+            <label>
+              <span>Email PIN</span>
+              <input name="otp" type="text" inputmode="numeric" autocomplete="one-time-code">
+            </label>
+            <button type="submit">Submit PIN</button>
+          </form>
+        </details>
       {% endif %}
       {% if job.log %}
         <pre>{{ job.log }}</pre>

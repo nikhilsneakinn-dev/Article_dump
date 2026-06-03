@@ -133,6 +133,18 @@ button,
   margin-top: 18px;
 }
 
+.otp-help {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+}
+
+.otp-help summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .muted {
   color: #526071;
 }

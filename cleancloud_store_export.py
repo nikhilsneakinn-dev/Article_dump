@@ -278,12 +278,17 @@ def login_with_credentials(
         raise RuntimeError("Could not find CleanCloud login fields on the page.")
 
     deadline = time.time() + timeout_seconds
+    submitted_at = time.time()
+    otp_fallback_started = False
     while time.time() < deadline:
         if LOGIN_URL_PART not in driver.current_url:
             driver.get(STORE_URL)
             wait_for_page_ready(driver)
             return
-        if otp_prompt_visible(driver):
+        if otp_prompt_visible(driver) or (
+            not otp_fallback_started and time.time() - submitted_at >= 12
+        ):
+            otp_fallback_started = True
             otp_code = wait_for_otp_code(otp_file, otp_request_file, otp_timeout_seconds)
             submit_otp_code(driver, otp_code)
             try:
