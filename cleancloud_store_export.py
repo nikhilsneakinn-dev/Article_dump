@@ -692,15 +692,20 @@ NON_ARTICLE_RE = re.compile(
 )
 QUANTITY_RE = re.compile(r"^(?P<name>.+?)\s+x\s*(?P<qty>\d+(?:\.\d+)?)\b", re.IGNORECASE)
 SERVICE_QUANTITY_RE = re.compile(r"(?P<name>.+?)\s+x\s*(?P<qty>\d+(?:\.\d+)?)\b", re.IGNORECASE)
-ARTICLE_DETAIL_RE = re.compile(r"^(?P<photo>\{P\})?\s*/?\s*(?P<label>[A-Z])\s*[-.\s]\s*(?P<detail>.+)$")
+ARTICLE_DETAIL_RE = re.compile(r"^(?P<photo>\{P\})?\s*/?\s*(?P<label>[A-Z]{1,3})\s*[-.\s]\s*(?P<detail>.+)$")
 PHOTO_DETAIL_RE = re.compile(r"^(?P<photo>\{P\})\s*/?\s*(?P<detail>.+)$")
-ARTICLE_LABEL_BOUNDARY_RE = re.compile(r"(?<!^)\s*:\s*((?:\{P\}\s*/?\s*)?[A-Z]\s*[-.\s])")
+ARTICLE_LABEL_BOUNDARY_RE = re.compile(r"(?<!^)\s*:\s*((?:\{P\}\s*/?\s*)?[A-Z]{1,3}\s*[-.\s])")
+PHOTO_ARTICLE_LABEL_BOUNDARY_RE = re.compile(r"(?<!^)\s+(\{P\}\s*/?\s*[A-Z]{1,3}\s*[-.\s])")
 TRAILING_INLINE_SERVICE_RE = re.compile(
     r"\s+(?:heel\s*-?\s*tip|full\s+bottom\s+sole\s+pasting|repair|stitching|insole\s+pasting|"
-    r"shaft\s+change|color\s+touch\s*up|color\s+touchup|delivery(?:\s*-\s*[^:]+)?\s*:\s*final|final)\s*$",
+    r"shaft\s+change|color\s+touch\s*up|color\s+touchup|clean\s*-\s*slides\s+sandals|"
+    r"delivery(?:\s*-\s*[^:]+)?\s*:\s*final|final)\s*$",
     re.IGNORECASE,
 )
-TRAILING_ATTACHED_SERVICE_RE = re.compile(r"(?<=\d)(?:heel\s*-?\s*tip)$", re.IGNORECASE)
+TRAILING_ATTACHED_SERVICE_RE = re.compile(
+    r"(?<=\d)(?:heel\s*-?\s*tip|clean\s*-\s*slides\s+sandals)$",
+    re.IGNORECASE,
+)
 SERVICE_PREFIX_RE = re.compile(
     r"(?=[A-Za-z][A-Za-z0-9 .&/()_-]*:\s*(?:\{P\})?\s*[A-Z]\s*[-.\s])"
 )
@@ -816,6 +821,7 @@ def split_inline_article_labels(line: str) -> list[str]:
     if not text:
         return []
     text = ARTICLE_LABEL_BOUNDARY_RE.sub(r"\n\1", text)
+    text = PHOTO_ARTICLE_LABEL_BOUNDARY_RE.sub(r"\n\1", text)
     parts = []
     for part in text.splitlines():
         part = clean_text(part)
@@ -966,16 +972,19 @@ def detail_items_from_text(order_id: str, detail_text: str, item_ids: list[str] 
 
 
 def label_for_index(index: int) -> str:
-    if index < 26:
-        return chr(ord("A") + index)
-    return f"X{index + 1}"
+    label = ""
+    index += 1
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        label = chr(ord("A") + remainder) + label
+    return label
 
 
 def detail_note_for_parser(item_note: str, index: int) -> str:
     note = clean_text(item_note)
     if not note:
         return ""
-    if re.match(r"^(?:\{P\}\s*)?[A-Z]\s*[-.\s]", note):
+    if re.match(r"^(?:\{P\}\s*)?[A-Z]{1,3}\s*[-.\s]", note):
         return note
     return f"{label_for_index(index)}-{note}"
 
